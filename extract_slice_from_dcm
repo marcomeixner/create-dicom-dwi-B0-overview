@@ -1,0 +1,118 @@
+# this script:
+#################
+# - runs through a parent folder that contains subfolders with DWI Dicom data
+# - uses dcmdump to identify the B0 volumes (install dcmdump: sudo apt install dcmtk)
+# - takes a sagittal slice of each B0  volume of a specified position (sagIdx)
+# - creates a bmp overview of all sagittal slices next to each other
+# - labels all overviews and puts them together vertically to a big bmp overview 
+
+# python scripts used: 
+#   extract_slice_from_dcm_to_bmp_arg.py 
+#   (python libraries required: os, numpy, PIL, argparse)
+#   merge_bmp_files_line_and_label.py
+#   (libraries required: os, PIL)
+#
+# input: 
+#   - rootPath: is the parent folder, which contains  subfolders,  of which each contains (only) the DWI dicom files (numVols = numFiles)
+#   - destPath: where the data is written (needs to have a '/' in the end)
+#   - scriptPath: where the script is (needs to have a '/' in the end)
+#   - sagittal slice index: sagIdx
+#
+# output: 
+#   - individual bmp overviews (filenames are input folder names) and labelled big bmp overview oview.bmp in destPath
+#
+# how to run the script: bash ./extract_slice_from_dcm (needs to run explcitly with 'bash')
+#
+# When looking at the bmp overviews, be aware that many image viewer automatically smoowth the images
+
+
+#!/bin/bash
+
+
+# reqiured inputs:
+rootPath="/mnt/c/Users/marco/HiDrive/KKB/Pipelines/data/test_oview_script/dwi"
+destPath="/mnt/c/Users/marco/HiDrive/KKB/Pipelines/data/test_oview_script/output/"
+scriptPath="/mnt/c/Users/marco/HiDrive/KKB/Pipelines/create_overivew/versionForGithub/"
+sagIdx=55
+
+
+
+cd $rootPath
+
+
+subCounter=1
+
+# loop over all subfolders in the rootdir:
+for currFolder in ./*; do
+
+    currFolder_name="${currFolder#./}"
+
+    cd $rootPath
+    cd $currFolder
+    cd *_dwi_multishell_AP
+
+
+    currFolder_clean="${currFolder#./}"
+
+    echo "current folder:" $currFolder_clean
+    echo "---------------------------------------------"
+
+    
+    b0_idx=()
+    counter=0
+
+    # loop over vol files to identify the B0 volumes:
+    for filename in *; do
+
+        #bVal=$(dcmdump ./$filename | grep "(0018,9087)" | sed -n 's/.*\[\([^]]*\)\].*/\1/p')
+        StudyDate=$(dcmdump ./$filename | grep "(0018,9087)" | sed -n 's/.*\[\([^]]*\)\].*/\1/p')
+        #bVal=$(dcmdump ./$filename | grep "(0018,9087)" | sed -n 's/.*FD \([0-9]*\).*/\1/p')
+        bVal=$(dcmdump ./$filename | grep "(0018,9087)" | head -n 1 | sed -n 's/.*FD \([0-9]*\).*/\1/p')
+
+
+
+        echo "idx: "$counter
+        echo "filename: "$filename
+        echo "bVal: "$bVal
+        echo "---"
+
+        if [ $bVal -eq 0 ]; then
+            b0_idx+=($counter)
+            
+        fi
+    
+        counter=$((counter+1))
+
+    done
+
+
+    echo "script:" $scriptPath"extract_slice_from_dcm_to_bmp_arg.py"
+    echo "input (PWD):" $PWD
+    echo "dest path:" $destPath$currFolder_clean".bmp"
+    #echo $bVal
+    echo "idx list:" "${b0_idx[@]}"
+
+
+
+    if [ 1 -eq 1 ]; then    # option 
+
+        python $scriptPath"extract_slice_from_dcm_to_bmp_arg.py" --sagittal_slice_idx $sagIdx --volume_indices "$(echo ${b0_idx[@]})" $PWD $destPath$currFolder_clean".bmp"
+        
+        # usage: extract_slice_from_dcm_to_bmp_arg.py [-h] [--sagittal_slice_idx SAGITTAL_SLICE_IDX]
+        #                                                  [--volume_indices VOLUME_INDICES]
+        #                                                  dicom_dir 
+        #                                                  output_file
+
+    fi
+
+        
+
+    echo "-----------------------------------------------------"
+
+
+done
+
+# merge all bmps in the dest folder in the end:
+python $scriptPath"merge_all_bmp_files_vertically_and_label.py" $destPath $destPath"oview.bmp"
+
+
